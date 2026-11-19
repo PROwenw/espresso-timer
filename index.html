@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Espresso 声控计时" />
+  <title>Espresso 双声纹计时器</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    :root {
+      color-scheme: dark;
+    }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", sans-serif;
+      background-color: #0e0d0c;
+      color: #f5f5f4;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior-y: contain;
+    }
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+    input[type="range"] {
+      accent-color: #f59e0b;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center px-4 py-5 pb-14 selection:bg-amber-500/30">
+  <div class="w-full max-w-md flex flex-col gap-4">
+
+    <!-- Header -->
+    <header class="flex items-center justify-between pt-1">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M18 8h1a4 4 0 010 8h-1M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 1v3M10 1v3M14 1v3" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-base font-semibold tracking-tight text-stone-100">Espresso 双声纹计时器</h1>
+          <p class="text-xs text-stone-400">本地永久保存 · 开始/结束独立声纹</p>
+        </div>
+      </div>
+      <div id="wakeBadge" class="hidden items-center gap-1.5 px-2.5 py-1 rounded-full bg-stone-800/90 border border-stone-700 text-[11px] text-stone-300">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+        <span>屏幕常亮</span>
+      </div>
+    </header>
+
+    <!-- Calibration Status Banner -->
+    <section id="calibBanner" class="rounded-2xl p-3.5 border transition-colors bg-stone-900/90 border-stone-800">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <span id="calibDot" class="w-2.5 h-2.5 rounded-full shrink-0 bg-amber-400"></span>
+          <div class="min-w-0">
+            <div id="calibTitle" class="text-sm font-medium text-stone-200 truncate">尚未完成声纹采集</div>
+            <div id="calibSub" class="text-xs text-stone-400 truncate">开始 0/2 · 结束 0/2（采集后自动永久保存）</div>
+          </div>
+        </div>
+        <button id="btnCalibOpen" type="button" class="shrink-0 px-3 py-1.5 rounded-xl text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 active:scale-95 transition">
+          采集/管理
+        </button>
+      </div>
+    </section>
+
+    <!-- Calibration Panel (Collapsible, Manual Start/Stop 2+2) -->
+    <section id="calibPanel" class="hidden rounded-2xl p-4 bg-stone-900 border border-amber-500/40 shadow-xl flex flex-col gap-3.5">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-amber-300">手动分段声纹采集（2次开始 + 2次结束）</h2>
+        <button id="btnCalibClose" type="button" class="text-xs text-stone-400 hover:text-stone-200 px-2 py-1">收起</button>
+      </div>
+
+      <!-- Mode Switch Tabs -->
+      <div class="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-stone-950 border border-stone-800">
+        <button id="tabStartCalib" type="button" class="py-2 rounded-lg text-xs font-semibold bg-amber-500 text-stone-950 transition">
+          开始按键 (0/2)
+        </button>
+        <button id="tabStopCalib" type="button" class="py-2 rounded-lg text-xs font-semibold text-stone-400 hover:text-stone-200 transition">
+          结束按键 (0/2)
+        </button>
+      </div>
+
+      <p id="calibGuideText" class="text-xs text-stone-300 leading-relaxed">
+        每次点击下方「开始采集」，按动咖啡机按键听到完整声音后点击「结束本次采集」。系统会自动截取最清晰的按键瞬态声纹并保存到本机。
+      </p>
+
+      <!-- 2 Sample Slots -->
+      <div class="grid grid-cols-2 gap-2.5">
+        <button data-slot="0" type="button" class="calib-slot h-10 rounded-xl border border-stone-700 bg-stone-800/60 flex items-center justify-center text-xs text-stone-400 transition">样本 1</button>
+        <button data-slot="1" type="button" class="calib-slot h-10 rounded-xl border border-stone-700 bg-stone-800/60 flex items-center justify-center text-xs text-stone-400 transition">样本 2</button>
+      </div>
+
+      <!-- Manual Record / Stop Capture Button -->
+      <div class="flex items-center gap-2">
+        <button id="btnRecordToggle" type="button" class="flex-1 py-3 rounded-xl bg-amber-500 text-stone-950 font-semibold text-sm hover:bg-amber-400 active:scale-[0.98] transition">
+          开始采集第 1 次
+        </button>
+        <button id="btnRecordClear" type="button" class="px-3.5 py-3 rounded-xl bg-stone-800 text-stone-300 text-xs font-medium border border-stone-700 hover:bg-stone-700 active:scale-95 transition">
+          清空本组
+        </button>
+      </div>
+
+      <div id="calibHint" class="text-xs text-amber-300/90 text-center min-h-[1rem]"></div>
+
+      <!-- Export Voiceprint -->
+      <div class="pt-2 border-t border-stone-800 flex flex-col gap-2">
+        <button id="btnExportVoiceprint" type="button" class="w-full py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-medium border border-stone-700 active:scale-[0.98] transition">
+          复制声纹数据（可贴给我写入代码）
+        </button>
+        <textarea id="exportBox" readonly rows="2" class="hidden w-full rounded-xl bg-stone-950 border border-stone-700 p-2 text-[10px] font-mono text-stone-300 focus:outline-none"></textarea>
+      </div>
+    </section>
+
+    <!-- Main Timer Card -->
+    <main class="rounded-3xl p-6 bg-gradient-to-b from-stone-900 to-stone-950 border border-stone-800 shadow-2xl flex flex-col items-center gap-5 relative overflow-hidden">
+      <!-- State Pill -->
+      <div id="stateBadge" class="px-3.5 py-1 rounded-full text-xs font-medium bg-stone-800 text-stone-300 border border-stone-700 flex items-center gap-2 transition-all">
+        <span id="stateDot" class="w-2 h-2 rounded-full bg-stone-500"></span>
+        <span id="stateText">待机 · 点击下方开始</span>
+      </div>
+
+      <!-- Big Timer Readout -->
+      <div class="flex flex-col items-center py-2">
+        <div id="timerDisplay" class="text-7xl font-bold tracking-tight tabular-nums text-stone-100 leading-none">
+          00.0
+        </div>
+        <div class="text-xs font-medium tracking-widest uppercase text-stone-500 mt-2">
+          SECONDS · 萃取时长
+        </div>
+      </div>
+
+      <!-- Live Match & Gate Indicators -->
+      <div class="w-full grid grid-cols-2 gap-2.5">
+        <div class="rounded-2xl bg-stone-900/90 border border-stone-800/90 px-3.5 py-2.5">
+          <div class="flex items-center justify-between text-[11px] text-stone-400 mb-1">
+            <span id="simLabel">声纹相似度</span>
+            <span id="simValue" class="tabular-nums font-medium text-stone-200">--%</span>
+          </div>
+          <div class="w-full h-1.5 bg-stone-800 rounded-full overflow-hidden">
+            <div id="simBar" class="h-full bg-amber-500 rounded-full transition-all duration-75" style="width: 0%"></div>
+          </div>
+        </div>
+        <div class="rounded-2xl bg-stone-900/90 border border-stone-800/90 px-3.5 py-2.5">
+          <div class="flex items-center justify-between text-[11px] text-stone-400 mb-1">
+            <span id="spikeLabel">瞬态突增</span>
+            <span id="spikeValue" class="tabular-nums font-medium text-stone-200">0.0x</span>
+          </div>
+          <div class="w-full h-1.5 bg-stone-800 rounded-full overflow-hidden">
+            <div id="spikeBar" class="h-full bg-emerald-500 rounded-full transition-all duration-75" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Primary Controls -->
+      <div class="w-full flex items-center gap-3 mt-1">
+        <button id="btnMain" type="button" class="flex-1 py-4 rounded-2xl bg-amber-500 text-stone-950 font-bold text-base shadow-lg shadow-amber-500/20 hover:bg-amber-400 active:scale-[0.98] transition">
+          开始监听
+        </button>
+        <button id="btnReset" type="button" class="px-5 py-4 rounded-2xl bg-stone-800/90 text-stone-200 font-medium text-sm border border-stone-700 hover:bg-stone-700 active:scale-95 transition">
+          重置
+        </button>
+      </div>
+
+      <!-- Error / Toast Area -->
+      <div id="toastMsg" class="hidden w-full text-center text-xs px-3 py-2 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300"></div>
+    </main>
+
+    <!-- Real-Time Spectrum Comparison Canvas -->
+    <section class="rounded-2xl p-4 bg-stone-900/80 border border-stone-800 flex flex-col gap-2.5">
+      <div class="flex items-center justify-between">
+        <span id="canvasTitle" class="text-xs font-medium text-stone-300">实时频谱 vs 声纹模板</span>
+        <span class="text-[11px] text-stone-500">高频减噪增强 · 过滤水泵低频</span>
+      </div>
+      <div class="relative w-full h-28 rounded-xl bg-stone-950 border border-stone-800/80 overflow-hidden">
+        <canvas id="specCanvas" class="w-full h-full block"></canvas>
+      </div>
+      <div id="eventLog" class="text-[11px] text-stone-400 flex items-center justify-between min-h-[1rem]">
+        <span>等待启动麦克风...</span>
+        <span id="noiseFloorText" class="tabular-nums text-stone-500">底噪: --</span>
+      </div>
+    </section>
+
+    <!-- Sensitivity & Anti-Interference Settings (Separate Start & Stop) -->
+    <section class="rounded-2xl p-4 bg-stone-900/80 border border-stone-800 flex flex-col gap-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xs font-semibold uppercase tracking-wider text-stone-400">独立灵敏度与抗干扰设置</h2>
+        <label class="flex items-center gap-2 text-xs text-stone-300 cursor-pointer">
+          <input id="chkUseTemplate" type="checkbox" checked class="rounded border-stone-600 bg-stone-800 text-amber-500 focus:ring-0" />
+          <span>启用声纹匹配</span>
+        </label>
+      </div>
+
+      <!-- Start Thresholds -->
+      <div class="p-3 rounded-xl bg-stone-950/60 border border-stone-800/80 flex flex-col gap-3">
+        <div class="text-[11px] font-semibold text-amber-400">开始阶段（机器待机，环境较安静）</div>
+        <div class="flex flex-col gap-1">
+          <div class="flex justify-between text-xs">
+            <span class="text-stone-300">开始声纹相似度阈值</span>
+            <span id="lblStartSim" class="tabular-nums text-amber-400 font-medium">78%</span>
+          </div>
+          <input id="rngStartSim" type="range" min="55" max="95" step="1" value="78" class="w-full" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <div class="flex justify-between text-xs">
+            <span class="text-stone-300">开始瞬态突增倍数</span>
+            <span id="lblStartSpike" class="tabular-nums text-amber-400 font-medium">2.6x</span>
+          </div>
+          <input id="rngStartSpike" type="range" min="1.4" max="6.0" step="0.1" value="2.6" class="w-full" />
+        </div>
+      </div>
+
+      <!-- Stop Thresholds (Optimized for Pump Running Noise) -->
+      <div class="p-3 rounded-xl bg-stone-950/60 border border-emerald-900/40 flex flex-col gap-3">
+        <div class="text-[11px] font-semibold text-emerald-400">结束阶段（水泵运转中，已启用高频减噪增强）</div>
+        <div class="flex flex-col gap-1">
+          <div class="flex justify-between text-xs">
+            <span class="text-stone-300">结束声纹相似度阈值</span>
+            <span id="lblStopSim" class="tabular-nums text-emerald-400 font-medium">68%</span>
+          </div>
+          <input id="rngStopSim" type="range" min="50" max="92" step="1" value="68" class="w-full" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <div class="flex justify-between text-xs">
+            <span class="text-stone-300">结束瞬态突增倍数（越低越灵敏）</span>
+            <span id="lblStopSpike" class="tabular-nums text-emerald-400 font-medium">1.6x</span>
+          </div>
+          <input id="rngStopSpike" type="range" min="1.2" max="4.5" step="0.1" value="1.6" class="w-full" />
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-1.5">
+        <div class="flex justify-between text-xs">
+          <span class="text-stone-300">防误触冷却时间（触发开始后锁定）</span>
+          <span id="lblCooldown" class="tabular-nums text-amber-400 font-medium">2.5 秒</span>
+        </div>
+        <input id="rngCooldown" type="range" min="1.0" max="5.0" step="0.5" value="2.5" class="w-full" />
+      </div>
+    </section>
+
+    <!-- Recent Shots History -->
+    <section class="rounded-2xl p-4 bg-stone-900/80 border border-stone-800 flex flex-col gap-2.5">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xs font-semibold uppercase tracking-wider text-stone-400">最近萃取记录</h2>
+        <button id="btnClearHistory" type="button" class="text-[11px] text-stone-500 hover:text-stone-300">清空</button>
+      </div>
+      <div id="historyList" class="flex flex-col gap-1.5 text-xs text-stone-400">
+        <div class="text-stone-500 py-2 text-center">暂无记录，完成一次萃取后自动保存</div>
+      </div>
+    </section>
+
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      const STORAGE_KEY = 'espresso_dual_voiceprint_v2';
+      const HISTORY_KEY = 'espresso_shot_history_v1';
+      // 贴上导出的声纹 JSON 即可永久内置（无需重新采集）
+      const BUILTIN_VOICEPRINT = null;
+
+      const STATE = {
+        IDLE: 'IDLE',
+        LISTENING: 'LISTENING',
+        TIMING: 'TIMING',
+        STOPPED: 'STOPPED',
+        CALIBRATING_HOLD: 'CALIBRATING_HOLD'
+      };
+
+      let currentState = STATE.IDLE;
+      let audioCtx = null;
+      let analyser = null;
+      let micStream = null;
+      let rafId = null;
+      let wakeLock = null;
+
+      // Timing
+      let timerStartPerf = 0;
+      let elapsedMs = 0;
+      let lastTriggerPerf = 0;
+
+      // Dual-band & Acoustic parameters
+      let startNoiseFloor = 0.012;
+      let stopNoiseFloor = 0.010;
+      let bgSpectrum = null;
+
+      let startSimThresh = 0.78;
+      let startSpikeMult = 2.6;
+      let stopSimThresh = 0.68;
+      let stopSpikeMult = 1.6;
+      let cooldownMs = 2500;
+      let useTemplate = true;
+
+      // FFT Setup
+      const FFT_SIZE = 1024;
+      let binStart = 12;
+      let binHighStart = 38;
+      let binEnd = 260;
+
+      // Dual Voiceprints (2 samples each)
+      let calibMode = 'start';
+      let activeSlotIndex = 0;
+      let isCapturingWindow = false;
+      let captureFrames = [];
+
+      let startSamples = [null, null];
+      let stopSamples = [null, null];
+      let startTemplate = null;
+      let stopTemplate = null;
+      let shotHistory = [];
+
+      let freqData = null;
+
+      // --- DOM Elements ---
+      const elTimer = document.getElementById('timerDisplay');
+      const elStateBadge = document.getElementById('stateBadge');
+      const elStateDot = document.getElementById('stateDot');
+      const elStateText = document.getElementById('stateText');
+      const elBtnMain = document.getElementById('btnMain');
+      const elBtnReset = document.getElementById('btnReset');
+      const elToast = document.getElementById('toastMsg');
+      const elWakeBadge = document.getElementById('wakeBadge');
+
+      const elSimLabel = document.getElementById('simLabel');
+      const elSimVal = document.getElementById('simValue');
+      const elSimBar = document.getElementById('simBar');
+      const elSpikeLabel = document.getElementById('spikeLabel');
+      const elSpikeVal = document.getElementById('spikeValue');
+      const elSpikeBar = document.getElementById('spikeBar');
+      const elEventLog = document.getElementById('eventLog').firstElementChild;
+      const elNoiseFloor = document.getElementById('noiseFloorText');
+      const elCanvasTitle = document.getElementById('canvasTitle');
+
+      const elCalibBanner = document.getElementById('calibBanner');
+      const elCalibDot = document.getElementById('calibDot');
+      const elCalibTitle = document.getElementById('calibTitle');
+      const elCalibSub = document.getElementById('calibSub');
+      const elCalibPanel = document.getElementById('calibPanel');
+      const elBtnCalibOpen = document.getElementById('btnCalibOpen');
+      const elBtnCalibClose = document.getElementById('btnCalibClose');
+      const elTabStart = document.getElementById('tabStartCalib');
+      const elTabStop = document.getElementById('tabStopCalib');
+      const elCalibGuide = document.getElementById('calibGuideText');
+      const elBtnRecordToggle = document.getElementById('btnRecordToggle');
+      const elBtnRecordClear = document.getElementById('btnRecordClear');
+      const elCalibHint = document.getElementById('calibHint');
+      const elBtnExport = document.getElementById('btnExportVoiceprint');
+      const elExportBox = document.getElementById('exportBox');
+      const slotButtons = Array.from(document.querySelectorAll('.calib-slot'));
+
+      const elChkTemplate = document.getElementById('chkUseTemplate');
+      const elRngStartSim = document.getElementById('rngStartSim');
+      const elLblStartSim = document.getElementById('lblStartSim');
+      const elRngStartSpike = document.getElementById('rngStartSpike');
+      const elLblStartSpike = document.getElementById('lblStartSpike');
+      const elRngStopSim = document.getElementById('rngStopSim');
+      const elLblStopSim = document.getElementById('lblStopSim');
+      const elRngStopSpike = document.getElementById('rngStopSpike');
+      const elLblStopSpike = document.getElementById('lblStopSpike');
+      const elRngCooldown = document.getElementById('rngCooldown');
+      const elLblCooldown = document.getElementById('lblCooldown');
+
+      const elHistoryList = document.getElementById('historyList');
+      const elBtnClearHistory = document.getElementById('btnClearHistory');
+      const canvas = document.getElementById('specCanvas');
+      const ctx = canvas.getContext('2d');
+
+      // --- Storage ---
+      function loadSavedData() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          const data = raw ? JSON.parse(raw) : BUILTIN_VOICEPRINT;
+          if (data) {
+            if (Array.isArray(data.startSamples) && data.startSamples.length >= 2) {
+              startSamples = data.startSamples.slice(0, 2);
+            }
+            if (Array.isArray(data.stopSamples) && data.stopSamples.length >= 2) {
+              stopSamples = data.stopSamples.slice(0, 2);
+            }
+            startTemplate = computeTemplate(startSamples);
+            stopTemplate = computeTemplate(stopSamples);
+
+            if (data.settings) {
+              if (typeof data.settings.startSimThresh === 'number') startSimThresh = data.settings.startSimThresh;
+              if (typeof data.settings.startSpikeMult === 'number') startSpikeMult = data.settings.startSpikeMult;
+              if (typeof data.settings.stopSimThresh === 'number') stopSimThresh = data.settings.stopSimThresh;
+              if (typeof data.settings.stopSpikeMult === 'number') stopSpikeMult = data.settings.stopSpikeMult;
+              if (typeof data.settings.cooldownMs === 'number') cooldownMs = data.settings.cooldownMs;
+              if (typeof data.settings.useTemplate === 'boolean') useTemplate = data.settings.useTemplate;
+            }
+          }
+          const hist = localStorage.getItem(HISTORY_KEY);
+          if (hist) {
+            const parsedHist = JSON.parse(hist);
+            if (Array.isArray(parsedHist)) shotHistory = parsedHist;
+          }
+        } catch (e) {}
+      }
+
+      function persistAll() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            startSamples,
+            stopSamples,
+            settings: {
+              startSimThresh,
+              startSpikeMult,
+              stopSimThresh,
+              stopSpikeMult,
+              cooldownMs,
+              useTemplate
+            }
+          }));
+        } catch (e) {}
+      }
+
+      function saveHistory() {
+        try {
+          localStorage.setItem(HISTORY_KEY, JSON.stringify(shotHistory.slice(0, 10)));
+        } catch (e) {}
+      }
+
+      function syncSlidersFromState() {
+        elChkTemplate.checked = useTemplate;
+        elRngStartSim.value = Math.round(startSimThresh * 100);
+        elLblStartSim.textContent = Math.round(startSimThresh * 100) + '%';
+        elRngStartSpike.value = startSpikeMult.toFixed(1);
+        elLblStartSpike.textContent = startSpikeMult.toFixed(1) + 'x';
+        elRngStopSim.value = Math.round(stopSimThresh * 100);
+        elLblStopSim.textContent = Math.round(stopSimThresh * 100) + '%';
+        elRngStopSpike.value = stopSpikeMult.toFixed(1);
+        elLblStopSpike.textContent = stopSpikeMult.toFixed(1) + 'x';
+        elRngCooldown.value = (cooldownMs / 1000).toFixed(1);
+        elLblCooldown.textContent = (cooldownMs / 1000).toFixed(1) + ' 秒';
+      }
+
+      // --- Vector Math ---
+      function normalizeVector(arr) {
+        let sq = 0;
+        for (let i = 0; i < arr.length; i++) sq += arr[i] * arr[i];
+        const norm = Math.sqrt(sq) || 1e-6;
+        return arr.map(v => v / norm);
+      }
+
+      function computeTemplate(samples) {
+        const valid = samples.filter(s => Array.isArray(s) && s.length > 0);
+        if (valid.length === 0) return null;
+        const len = valid[0].length;
+        const avg = new Array(len).fill(0);
+        for (let s of valid) {
+          if (s.length !== len) continue;
+          for (let i = 0; i < len; i++) avg[i] += s[i];
+        }
+        return normalizeVector(avg);
+      }
+
+      function cosineSimilarity(a, b) {
+        if (!a || !b || a.length !== b.length) return 0;
+        let dot = 0;
+        for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
+        return Math.max(0, Math.min(1, dot));
+      }
+
+      // --- UI Helpers ---
+      function showError(msg) {
+        if (!msg) {
+          elToast.classList.add('hidden');
+          elToast.textContent = '';
+        } else {
+          elToast.textContent = msg;
+          elToast.classList.remove('hidden');
+        }
+      }
+
+      function countValid(samples) {
+        return samples.filter(Boolean).length;
+      }
+
+      function nextEmptySlot(samples) {
+        const idx = samples.findIndex(s => !s);
+        return idx === -1 ? 0 : idx;
+      }
+
+      function updateCalibUI() {
+        const startCount = countValid(startSamples);
+        const stopCount = countValid(stopSamples);
+
+        elTabStart.textContent = `开始按键 (${startCount}/2)`;
+        elTabStop.textContent = `结束按键 (${stopCount}/2)`;
+
+        if (calibMode === 'start') {
+          elTabStart.className = 'py-2 rounded-lg text-xs font-semibold bg-amber-500 text-stone-950 transition';
+          elTabStop.className = 'py-2 rounded-lg text-xs font-semibold text-stone-400 hover:text-stone-200 transition';
+          elCalibGuide.innerHTML = '采集 <strong class="text-amber-300">开始萃取按键声</strong>：点击「开始采集」，按动咖啡机开始键，听到声音后点「结束本次采集」。';
+        } else {
+          elTabStart.className = 'py-2 rounded-lg text-xs font-semibold text-stone-400 hover:text-stone-200 transition';
+          elTabStop.className = 'py-2 rounded-lg text-xs font-semibold bg-emerald-500 text-stone-950 transition';
+          elCalibGuide.innerHTML = '采集 <strong class="text-emerald-300">结束萃取按键声</strong>（建议在真实泵压工作声下按结束键采集，抗干扰最准）：点击「开始采集」→ 按结束键 → 点「结束本次采集」。';
+        }
+
+        if (startCount === 2 && stopCount === 2) {
+          elCalibDot.className = 'w-2.5 h-2.5 rounded-full shrink-0 bg-emerald-400';
+          elCalibTitle.textContent = '双声纹已就绪并永久保存';
+          elCalibSub.textContent = '开始 2/2 · 结束 2/2（下次打开自动加载）';
+          elCalibBanner.className = 'rounded-2xl p-3.5 border transition-colors bg-emerald-950/20 border-emerald-800/50';
+        } else if (startCount > 0 || stopCount > 0) {
+          elCalibDot.className = 'w-2.5 h-2.5 rounded-full shrink-0 bg-amber-400';
+          elCalibTitle.textContent = '声纹采集进行中（已自动保存）';
+          elCalibSub.textContent = `开始 ${startCount}/2 · 结束 ${stopCount}/2（各录 2 次即可）`;
+          elCalibBanner.className = 'rounded-2xl p-3.5 border transition-colors bg-stone-900/90 border-amber-500/40';
+        } else {
+          elCalibDot.className = 'w-2.5 h-2.5 rounded-full shrink-0 bg-amber-400';
+          elCalibTitle.textContent = '尚未完成声纹采集';
+          elCalibSub.textContent = '开始 0/2 · 结束 0/2（采集后自动永久保存）';
+          elCalibBanner.className = 'rounded-2xl p-3.5 border transition-colors bg-stone-900/90 border-stone-800';
+        }
+
+        const currentArr = calibMode === 'start' ? startSamples : stopSamples;
+        if (!isCapturingWindow) {
+          activeSlotIndex = Math.min(1, Math.max(0, activeSlotIndex));
+        }
+
+        slotButtons.forEach((btn, idx) => {
+          const isDone = Boolean(currentArr[idx]);
+          const isSelected = idx === activeSlotIndex;
+          if (isCapturingWindow && isSelected) {
+            btn.className = 'calib-slot h-10 rounded-xl border-2 border-red-500 bg-red-500/20 flex items-center justify-center text-xs font-semibold text-red-300 animate-pulse';
+            btn.textContent = '录制中...';
+          } else if (isDone) {
+            btn.className = `calib-slot h-10 rounded-xl border ${isSelected ? 'border-emerald-300 ring-1 ring-emerald-400/50' : 'border-emerald-500/50'} bg-emerald-500/15 flex items-center justify-center text-xs font-medium text-emerald-300`;
+            btn.textContent = `✓ 样本 ${idx + 1}`;
+          } else {
+            btn.className = `calib-slot h-10 rounded-xl border ${isSelected ? 'border-amber-400 bg-amber-500/15 text-amber-200' : 'border-stone-700 bg-stone-800/60 text-stone-400'} flex items-center justify-center text-xs`;
+            btn.textContent = `样本 ${idx + 1}`;
+          }
+        });
+
+        if (isCapturingWindow) {
+          elBtnRecordToggle.textContent = `结束第 ${activeSlotIndex + 1} 次采集`;
+          elBtnRecordToggle.className = 'flex-1 py-3 rounded-xl bg-red-500 text-white font-semibold text-sm hover:bg-red-400 active:scale-[0.98] transition';
+        } else {
+          const prefix = currentArr[activeSlotIndex] ? '重录' : '开始采集';
+          elBtnRecordToggle.textContent = `${prefix}第 ${activeSlotIndex + 1} 次`;
+          elBtnRecordToggle.className = calibMode === 'start'
+            ? 'flex-1 py-3 rounded-xl bg-amber-500 text-stone-950 font-semibold text-sm hover:bg-amber-400 active:scale-[0.98] transition'
+            : 'flex-1 py-3 rounded-xl bg-emerald-500 text-stone-950 font-semibold text-sm hover:bg-emerald-400 active:scale-[0.98] transition';
+        }
+      }
+
+      function updateStateUI() {
+        switch (currentState) {
+          case STATE.IDLE:
+            elStateDot.className = 'w-2 h-2 rounded-full bg-stone-500';
+            elStateText.textContent = '待机 · 点击下方开始';
+            elStateBadge.className = 'px-3.5 py-1 rounded-full text-xs font-medium bg-stone-800 text-stone-300 border border-stone-700 flex items-center gap-2';
+            elBtnMain.textContent = '开始监听';
+            elBtnMain.className = 'flex-1 py-4 rounded-2xl bg-amber-500 text-stone-950 font-bold text-base shadow-lg shadow-amber-500/20 hover:bg-amber-400 active:scale-[0.98] transition';
+            elSimLabel.textContent = '声纹相似度';
+            elSpikeLabel.textContent = '瞬态突增';
+            elCanvasTitle.textContent = '实时频谱 vs 声纹模板';
+            break;
+          case STATE.CALIBRATING_HOLD:
+            elStateDot.className = 'w-2 h-2 rounded-full bg-red-400 animate-ping';
+            elStateText.textContent = '正在采集按键声样本...';
+            elStateBadge.className = 'px-3.5 py-1 rounded-full text-xs font-medium bg-red-500/15 text-red-300 border border-red-500/40 flex items-center gap-2';
+            elBtnMain.textContent = '采集中...';
+            elBtnMain.className = 'flex-1 py-4 rounded-2xl bg-stone-800 text-stone-400 font-bold text-base cursor-not-allowed';
+            break;
+          case STATE.LISTENING:
+            elStateDot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-ping';
+            elStateText.textContent = '监听中 · 等待【开始】按键声';
+            elStateBadge.className = 'px-3.5 py-1 rounded-full text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/40 flex items-center gap-2';
+            elBtnMain.textContent = '取消监听';
+            elBtnMain.className = 'flex-1 py-4 rounded-2xl bg-stone-800 text-stone-200 font-bold text-base border border-stone-700 hover:bg-stone-700 active:scale-[0.98] transition';
+            elSimLabel.textContent = '开始声纹匹配';
+            elSpikeLabel.textContent = '全频瞬态';
+            elCanvasTitle.textContent = '实时频谱 vs 【开始】声纹模板';
+            break;
+          case STATE.TIMING:
+            elStateDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-ping';
+            elStateText.textContent = '计时中 · 等待【结束】按键声';
+            elStateBadge.className = 'px-3.5 py-1 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 flex items-center gap-2';
+            elBtnMain.textContent = '手动结束';
+            elBtnMain.className = 'flex-1 py-4 rounded-2xl bg-emerald-500 text-stone-950 font-bold text-base shadow-lg shadow-emerald-500/20 hover:bg-emerald-400 active:scale-[0.98] transition';
+            elSimLabel.textContent = '结束声纹匹配';
+            elSpikeLabel.textContent = '高频瞬态(去泵声)';
+            elCanvasTitle.textContent = '实时频谱 vs 【结束】声纹模板';
+            break;
+          case STATE.STOPPED:
+            elStateDot.className = 'w-2 h-2 rounded-full bg-sky-400';
+            elStateText.textContent = '萃取完成 · 计时已定格';
+            elStateBadge.className = 'px-3.5 py-1 rounded-full text-xs font-medium bg-sky-500/15 text-sky-300 border border-sky-500/40 flex items-center gap-2';
+            elBtnMain.textContent = '再来一次';
+            elBtnMain.className = 'flex-1 py-4 rounded-2xl bg-amber-500 text-stone-950 font-bold text-base shadow-lg shadow-amber-500/20 hover:bg-amber-400 active:scale-[0.98] transition';
+            break;
+        }
+      }
+
+      function renderHistory() {
+        if (shotHistory.length === 0) {
+          elHistoryList.innerHTML = '<div class="text-stone-500 py-2 text-center">暂无记录，完成一次萃取后自动保存</div>';
+          return;
+        }
+        elHistoryList.innerHTML = shotHistory.map((item, idx) => {
+          const isIdeal = item.sec >= 22 && item.sec <= 34;
+          const badgeClass = isIdeal
+            ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+            : 'text-amber-300 bg-amber-500/10 border-amber-500/30';
+          return `
+            <div class="flex items-center justify-between px-3 py-2 rounded-xl bg-stone-950/60 border border-stone-800/80">
+              <div class="flex items-center gap-2.5">
+                <span class="text-stone-500 tabular-nums">#${shotHistory.length - idx}</span>
+                <span class="text-stone-300">${item.time}</span>
+              </div>
+              <span class="px-2 py-0.5 rounded-lg border text-xs font-semibold tabular-nums ${badgeClass}">
+                ${item.sec.toFixed(1)} s
+              </span>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // --- Wake Lock ---
+      async function requestWakeLock() {
+        try {
+          if ('wakeLock' in navigator && !wakeLock) {
+            wakeLock = await navigator.wakeLock.request('screen');
+            elWakeBadge.classList.remove('hidden');
+            elWakeBadge.classList.add('flex');
+            wakeLock.addEventListener('release', () => {
+              wakeLock = null;
+              elWakeBadge.classList.add('hidden');
+              elWakeBadge.classList.remove('flex');
+            });
+          }
+        } catch (e) {}
+      }
+
+      function releaseWakeLock() {
+        if (wakeLock) {
+          try { wakeLock.release(); } catch (e) {}
+          wakeLock = null;
+        }
+      }
+
+      // --- Audio Engine ---
+      async function ensureAudioReady() {
+        showError('');
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error('当前环境不支持麦克风 API（请通过 HTTPS 链接或 Safari 打开）');
+        }
+        if (!audioCtx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          audioCtx = new AudioContextClass();
+        }
+        if (audioCtx.state === 'suspended') {
+          await audioCtx.resume();
+        }
+        if (!micStream) {
+          try {
+            micStream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: false
+              }
+            });
+          } catch (constraintErr) {
+            micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          }
+          const source = audioCtx.createMediaStreamSource(micStream);
+          analyser = audioCtx.createAnalyser();
+          analyser.fftSize = FFT_SIZE;
+          analyser.smoothingTimeConstant = 0.10;
+          source.connect(analyser);
+
+          const binHz = audioCtx.sampleRate / FFT_SIZE;
+          binStart = Math.max(1, Math.floor(550 / binHz));
+          binHighStart = Math.max(binStart + 1, Math.floor(1750 / binHz));
+          binEnd = Math.min(analyser.frequencyBinCount - 1, Math.floor(12000 / binHz));
+
+          freqData = new Uint8Array(analyser.frequencyBinCount);
+        }
+      }
+
+      function extractAudioFeatures() {
+        analyser.getByteFrequencyData(freqData);
+        const len = binEnd - binStart + 1;
+        const highOffset = binHighStart - binStart;
+        const rawVec = new Array(len);
+
+        let fullSqSum = 0;
+        let highSqSum = 0;
+        const highLen = Math.max(1, len - highOffset);
+
+        for (let i = 0; i < len; i++) {
+          const val = freqData[binStart + i] / 255.0;
+          rawVec[i] = val;
+          fullSqSum += val * val;
+          if (i >= highOffset) {
+            highSqSum += val * val;
+          }
+        }
+
+        const fullRms = Math.sqrt(fullSqSum / len);
+        const highRms = Math.sqrt(highSqSum / highLen);
+        const normVec = normalizeVector(rawVec);
+
+        return { fullRms, highRms, rawVec, normVec };
+      }
+
+      function drawSpectrum(liveNormVec, targetTemplate, isSpike, isMatch) {
+        const dpr = window.devicePixelRatio || 1;
+        const w = canvas.clientWidth;
+        const h = canvas.clientHeight;
+        if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+          canvas.width = w * dpr;
+          canvas.height = h * dpr;
+        }
+        ctx.save();
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, w, h);
+
+        if (liveNormVec && liveNormVec.length > 0) {
+          const barCount = Math.min(64, liveNormVec.length);
+          const step = Math.floor(liveNormVec.length / barCount);
+          const barW = w / barCount;
+
+          for (let i = 0; i < barCount; i++) {
+            let maxVal = 0;
+            for (let j = 0; j < step; j++) {
+              const v = liveNormVec[i * step + j] || 0;
+              if (v > maxVal) maxVal = v;
+            }
+            const barH = Math.min(h - 6, maxVal * h * 2.6);
+            ctx.fillStyle = isSpike
+              ? (isMatch ? '#10b981' : '#ef4444')
+              : 'rgba(245, 158, 11, 0.45)';
+            ctx.fillRect(i * barW + 1, h - barH, Math.max(1, barW - 2), barH);
+          }
+
+          if (targetTemplate && targetTemplate.length === liveNormVec.length) {
+            ctx.beginPath();
+            ctx.strokeStyle = currentState === STATE.TIMING ? 'rgba(52, 211, 153, 0.9)' : 'rgba(255, 255, 255, 0.85)';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([3, 3]);
+            for (let i = 0; i < barCount; i++) {
+              let maxVal = 0;
+              for (let j = 0; j < step; j++) {
+                const v = targetTemplate[i * step + j] || 0;
+                if (v > maxVal) maxVal = v;
+              }
+              const y = h - Math.min(h - 6, maxVal * h * 2.6);
+              const x = i * barW + barW / 2;
+              if (i === 0) ctx.moveTo(x, y);
+              else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
+
+      // --- Manual Capture Finalization ---
+      function finalizeManualCapture() {
+        isCapturingWindow = false;
+        currentState = STATE.IDLE;
+
+        if (captureFrames.length < 3) {
+          elCalibHint.textContent = '录制时间过短，请重试并确保包含完整按键声';
+          updateCalibUI();
+          updateStateUI();
+          return;
+        }
+
+        const sortedByRms = [...captureFrames].sort((a, b) => a.highRms - b.highRms);
+        const bgCount = Math.max(1, Math.floor(sortedByRms.length * 0.3));
+        const len = captureFrames[0].rawVec.length;
+        const localBg = new Array(len).fill(0);
+        for (let i = 0; i < bgCount; i++) {
+          for (let j = 0; j < len; j++) localBg[j] += sortedByRms[i].rawVec[j] / bgCount;
+        }
+
+        let peakIdx = 0;
+        let peakVal = -1;
+        for (let i = 0; i < captureFrames.length; i++) {
+          const score = calibMode === 'stop' ? captureFrames[i].highRms : captureFrames[i].fullRms;
+          if (score > peakVal) {
+            peakVal = score;
+            peakIdx = i;
+          }
+        }
+
+        if (peakVal < 0.012) {
+          elCalibHint.textContent = '声音太微弱，请将手机靠近咖啡机后重新采集本次';
+          updateCalibUI();
+          updateStateUI();
+          return;
+        }
+
+        const startIdx = Math.max(0, peakIdx - 1);
+        const endIdx = Math.min(captureFrames.length - 1, peakIdx + 1);
+        const extracted = new Array(len).fill(0);
+        for (let i = startIdx; i <= endIdx; i++) {
+          for (let j = 0; j < len; j++) {
+            const diff = Math.max(0, captureFrames[i].rawVec[j] - localBg[j] * 0.8);
+            extracted[j] += diff;
+          }
+        }
+        const finalVec = normalizeVector(extracted);
+
+        if (calibMode === 'start') {
+          startSamples[activeSlotIndex] = finalVec;
+          startTemplate = computeTemplate(startSamples);
+          activeSlotIndex = nextEmptySlot(startSamples);
+        } else {
+          stopSamples[activeSlotIndex] = finalVec;
+          stopTemplate = computeTemplate(stopSamples);
+          activeSlotIndex = nextEmptySlot(stopSamples);
+        }
+
+        persistAll();
+        const doneCount = calibMode === 'start' ? countValid(startSamples) : countValid(stopSamples);
+        elCalibHint.textContent = doneCount === 2
+          ? `✓ ${calibMode === 'start' ? '开始' : '结束'}按键 2 次采集完成并已永久保存！`
+          : `✓ 已保存第 1 次样本，请继续采集第 2 次 (${doneCount}/2)`;
+
+        updateCalibUI();
+        updateStateUI();
+      }
+
+      // --- Main Loop ---
+      function loop() {
+        const now = performance.now();
+
+        if (currentState === STATE.TIMING) {
+          elapsedMs = now - timerStartPerf;
+          elTimer.textContent = (elapsedMs / 1000).toFixed(1);
+        }
+
+        if (analyser && (currentState === STATE.LISTENING || currentState === STATE.TIMING || currentState === STATE.CALIBRATING_HOLD)) {
+          const { fullRms, highRms, rawVec, normVec } = extractAudioFeatures();
+
+          if (currentState === STATE.CALIBRATING_HOLD && isCapturingWindow) {
+            captureFrames.push({ fullRms, highRms, rawVec });
+            const targetTpl = calibMode === 'start' ? startTemplate : stopTemplate;
+            drawSpectrum(normVec, targetTpl, fullRms > 0.03, true);
+          } else {
+            if (!bgSpectrum || bgSpectrum.length !== rawVec.length) {
+              bgSpectrum = [...rawVec];
+            }
+
+            const isTiming = currentState === STATE.TIMING;
+            const activeFloor = isTiming ? stopNoiseFloor : startNoiseFloor;
+            const activeRms = isTiming ? highRms : fullRms;
+            const activeMult = isTiming ? stopSpikeMult : startSpikeMult;
+            const activeThresh = isTiming ? stopSimThresh : startSimThresh;
+            const activeTemplate = isTiming ? (stopTemplate || startTemplate) : startTemplate;
+
+            const ratio = activeRms / Math.max(0.004, activeFloor);
+            const minAbs = isTiming ? 0.012 : 0.020;
+            const isSpike = activeRms > minAbs && ratio >= activeMult;
+
+            if (!isSpike) {
+              if (isTiming) {
+                stopNoiseFloor = Math.max(0.004, Math.min(0.18, stopNoiseFloor * 0.94 + highRms * 0.06));
+              } else {
+                startNoiseFloor = Math.max(0.004, Math.min(0.15, startNoiseFloor * 0.96 + fullRms * 0.04));
+              }
+              for (let i = 0; i < rawVec.length; i++) {
+                bgSpectrum[i] = bgSpectrum[i] * 0.92 + rawVec[i] * 0.08;
+              }
+            }
+
+            let sim = 1.0;
+            if (activeTemplate) {
+              const rawSim = cosineSimilarity(normVec, activeTemplate);
+              const deltaRaw = rawVec.map((v, idx) => Math.max(0, v - bgSpectrum[idx] * 0.85));
+              const deltaSim = cosineSimilarity(normalizeVector(deltaRaw), activeTemplate);
+              sim = Math.max(rawSim, deltaSim);
+            }
+            const simPct = Math.round(sim * 100);
+
+            elNoiseFloor.textContent = '底噪: ' + (activeFloor * 100).toFixed(1);
+            elSpikeVal.textContent = ratio.toFixed(1) + 'x';
+            elSpikeBar.style.width = Math.min(100, (ratio / (activeMult * 1.6)) * 100) + '%';
+            elSpikeBar.className = isSpike
+              ? 'h-full bg-emerald-400 rounded-full transition-all duration-75'
+              : 'h-full bg-stone-500 rounded-full transition-all duration-75';
+
+            if (activeTemplate) {
+              elSimVal.textContent = simPct + '%';
+              elSimBar.style.width = simPct + '%';
+              elSimBar.className = sim >= activeThresh
+                ? 'h-full bg-emerald-400 rounded-full transition-all duration-75'
+                : 'h-full bg-amber-500 rounded-full transition-all duration-75';
+            } else {
+              elSimVal.textContent = '未采集';
+              elSimBar.style.width = '0%';
+            }
+
+            const matchOk = !useTemplate || !activeTemplate || sim >= activeThresh;
+            drawSpectrum(normVec, activeTemplate, isSpike, matchOk);
+
+            if (isSpike) {
+              const inCooldown = (now - lastTriggerPerf) < cooldownMs;
+              if (!inCooldown) {
+                if (!matchOk) {
+                  lastTriggerPerf = now - (cooldownMs - 350);
+                  elEventLog.textContent = `已过滤干扰声：相似度 ${simPct}% < 阈值 ${Math.round(activeThresh * 100)}%`;
+                } else {
+                  lastTriggerPerf = now;
+                  if (currentState === STATE.LISTENING) {
+                    currentState = STATE.TIMING;
+                    timerStartPerf = now;
+                    elapsedMs = 0;
+                    stopNoiseFloor = Math.max(0.008, highRms * 0.7);
+                    updateStateUI();
+                    elEventLog.textContent = activeTemplate
+                      ? `✓ 匹配【开始】声纹 (${simPct}%)，开始计时！`
+                      : '✓ 检测到声音突变，开始计时！';
+                  } else if (currentState === STATE.TIMING) {
+                    elapsedMs = now - timerStartPerf;
+                    elTimer.textContent = (elapsedMs / 1000).toFixed(1);
+                    currentState = STATE.STOPPED;
+                    updateStateUI();
+                    releaseWakeLock();
+
+                    const finalSec = elapsedMs / 1000;
+                    const timeStr = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+                    shotHistory.unshift({ sec: finalSec, time: timeStr });
+                    shotHistory = shotHistory.slice(0, 10);
+                    saveHistory();
+                    renderHistory();
+
+                    elEventLog.textContent = activeTemplate
+                      ? `✓ 匹配【结束】声纹 (${simPct}%)，耗时 ${finalSec.toFixed(1)}s`
+                      : `✓ 检测到结束声响，耗时 ${finalSec.toFixed(1)}s`;
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          drawSpectrum(null, calibMode === 'start' ? startTemplate : stopTemplate, false, false);
+        }
+
+        rafId = requestAnimationFrame(loop);
+      }
+
+      // --- Event Listeners ---
+      elBtnMain.addEventListener('click', async () => {
+        if (currentState === STATE.CALIBRATING_HOLD) return;
+
+        if (currentState === STATE.IDLE || currentState === STATE.STOPPED) {
+          try {
+            await ensureAudioReady();
+            await requestWakeLock();
+            elapsedMs = 0;
+            elTimer.textContent = '00.0';
+            lastTriggerPerf = performance.now() - cooldownMs + 300;
+            bgSpectrum = null;
+            currentState = STATE.LISTENING;
+            updateStateUI();
+            elEventLog.textContent = startTemplate
+              ? '麦克风已就绪，正在等待【开始】按键声...'
+              : '麦克风已就绪（建议先采集双声纹以防干扰）';
+          } catch (err) {
+            showError(err.message || '无法访问麦克风，请在 Safari 设置中允许麦克风权限');
+          }
+        } else if (currentState === STATE.LISTENING) {
+          currentState = STATE.IDLE;
+          releaseWakeLock();
+          updateStateUI();
+          elEventLog.textContent = '已取消监听';
+        } else if (currentState === STATE.TIMING) {
+          elapsedMs = performance.now() - timerStartPerf;
+          elTimer.textContent = (elapsedMs / 1000).toFixed(1);
+          currentState = STATE.STOPPED;
+          releaseWakeLock();
+          updateStateUI();
+          const finalSec = elapsedMs / 1000;
+          const timeStr = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+          shotHistory.unshift({ sec: finalSec, time: timeStr });
+          shotHistory = shotHistory.slice(0, 10);
+          saveHistory();
+          renderHistory();
+          elEventLog.textContent = `已手动结束计时：${finalSec.toFixed(1)}s`;
+        }
+      });
+
+      elBtnReset.addEventListener('click', () => {
+        if (isCapturingWindow) isCapturingWindow = false;
+        currentState = STATE.IDLE;
+        elapsedMs = 0;
+        elTimer.textContent = '00.0';
+        releaseWakeLock();
+        updateCalibUI();
+        updateStateUI();
+        elEventLog.textContent = '已重置';
+      });
+
+      elBtnCalibOpen.addEventListener('click', () => {
+        elCalibPanel.classList.toggle('hidden');
+      });
+
+      elBtnCalibClose.addEventListener('click', () => {
+        if (isCapturingWindow) {
+          isCapturingWindow = false;
+          currentState = STATE.IDLE;
+          updateStateUI();
+        }
+        elCalibPanel.classList.add('hidden');
+        updateCalibUI();
+      });
+
+      elTabStart.addEventListener('click', () => {
+        if (isCapturingWindow) return;
+        calibMode = 'start';
+        activeSlotIndex = nextEmptySlot(startSamples);
+        elCalibHint.textContent = '';
+        updateCalibUI();
+      });
+
+      elTabStop.addEventListener('click', () => {
+        if (isCapturingWindow) return;
+        calibMode = 'stop';
+        activeSlotIndex = nextEmptySlot(stopSamples);
+        elCalibHint.textContent = '';
+        updateCalibUI();
+      });
+
+      slotButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          if (isCapturingWindow) return;
+          activeSlotIndex = Number(btn.dataset.slot);
+          elCalibHint.textContent = `已选中样本 ${activeSlotIndex + 1}，点击下方按钮采集或重录`;
+          updateCalibUI();
+        });
+      });
+
+      elBtnRecordToggle.addEventListener('click', async () => {
+        if (!isCapturingWindow) {
+          try {
+            await ensureAudioReady();
+            captureFrames = [];
+            isCapturingWindow = true;
+            currentState = STATE.CALIBRATING_HOLD;
+            elCalibHint.textContent = '录音中... 请按动咖啡机按键，听到完整声音后再点「结束」';
+            updateCalibUI();
+            updateStateUI();
+          } catch (err) {
+            showError(err.message || '无法访问麦克风，请检查权限');
+          }
+        } else {
+          finalizeManualCapture();
+        }
+      });
+
+      elBtnRecordClear.addEventListener('click', () => {
+        if (isCapturingWindow) return;
+        if (calibMode === 'start') {
+          startSamples = [null, null];
+          startTemplate = null;
+        } else {
+          stopSamples = [null, null];
+          stopTemplate = null;
+        }
+        activeSlotIndex = 0;
+        persistAll();
+        elCalibHint.textContent = `已清空${calibMode === 'start' ? '开始' : '结束'}按键样本`;
+        updateCalibUI();
+      });
+
+      elBtnExport.addEventListener('click', async () => {
+        const payload = JSON.stringify({
+          startSamples,
+          stopSamples,
+          settings: {
+            startSimThresh,
+            startSpikeMult,
+            stopSimThresh,
+            stopSpikeMult,
+            cooldownMs,
+            useTemplate
+          }
+        });
+        elExportBox.value = payload;
+        elExportBox.classList.remove('hidden');
+        elExportBox.select();
+        let copied = false;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(payload);
+            copied = true;
+          }
+        } catch (e) {}
+        if (!copied) {
+          try {
+            copied = document.execCommand('copy');
+          } catch (e) {}
+        }
+        elCalibHint.textContent = copied
+          ? '✓ 已复制声纹数据！'
+          : '已显示声纹数据在下方框内，请全选复制';
+      });
+
+      // Settings listeners
+      elChkTemplate.addEventListener('change', (e) => {
+        useTemplate = e.target.checked;
+        persistAll();
+      });
+      elRngStartSim.addEventListener('input', (e) => {
+        startSimThresh = Number(e.target.value) / 100;
+        elLblStartSim.textContent = e.target.value + '%';
+        persistAll();
+      });
+      elRngStartSpike.addEventListener('input', (e) => {
+        startSpikeMult = Number(e.target.value);
+        elLblStartSpike.textContent = startSpikeMult.toFixed(1) + 'x';
+        persistAll();
+      });
+      elRngStopSim.addEventListener('input', (e) => {
+        stopSimThresh = Number(e.target.value) / 100;
+        elLblStopSim.textContent = e.target.value + '%';
+        persistAll();
+      });
+      elRngStopSpike.addEventListener('input', (e) => {
+        stopSpikeMult = Number(e.target.value);
+        elLblStopSpike.textContent = stopSpikeMult.toFixed(1) + 'x';
+        persistAll();
+      });
+      elRngCooldown.addEventListener('input', (e) => {
+        cooldownMs = Number(e.target.value) * 1000;
+        elLblCooldown.textContent = Number(e.target.value).toFixed(1) + ' 秒';
+        persistAll();
+      });
+
+      elBtnClearHistory.addEventListener('click', () => {
+        shotHistory = [];
+        saveHistory();
+        renderHistory();
+      });
+
+      // Init
+      loadSavedData();
+      syncSlidersFromState();
+      activeSlotIndex = nextEmptySlot(startSamples);
+      updateCalibUI();
+      updateStateUI();
+      renderHistory();
+      rafId = requestAnimationFrame(loop);
+    })();
+  </script>
+</body>
+</html>
